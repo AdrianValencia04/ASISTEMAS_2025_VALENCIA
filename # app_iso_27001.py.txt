@@ -1,0 +1,64 @@
+# app_iso_27001.py
+
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+
+# Cargar archivo Excel
+@st.cache_data
+def cargar_datos():
+    df = pd.read_excel("Cuestionario_ISO_27001_Regenerado.xlsx")
+    df = df[~df["Dominio"].str.contains("INSTRUCCIONES|Ejemplo", na=False)]
+    return df
+
+# Interpretación según promedio
+def interpretar_promedio(valor):
+    if valor <= 2.0:
+        return "🔴 Riesgo Alto – Se requiere intervención inmediata."
+    elif valor <= 3.5:
+        return "🟡 Riesgo Medio – Oportunidad de mejora."
+    else:
+        return "🟢 Cumplimiento Bueno – Controles adecuados."
+
+# App Streamlit
+st.set_page_config(page_title="Autoevaluación ISO 27001", layout="wide")
+st.title("🛡️ Autoevaluación ISO 27001 - SGSI")
+st.markdown("Responda el siguiente cuestionario en una escala del 1 al 5:")
+
+df = cargar_datos()
+respuestas = {}
+
+# Mostrar preguntas con sliders
+for i, row in df.iterrows():
+    dominio = row["Dominio"]
+    pregunta = row["Pregunta"]
+    key = f"{dominio}-{i}"
+    with st.expander(f"{dominio}"):
+        respuestas[key] = st.slider(pregunta, 1, 5, 3, key=key)
+
+# Convertir respuestas en DataFrame
+df_respuestas = df.copy()
+df_respuestas["Respuesta"] = [respuestas.get(f"{row['Dominio']}-{i}", 3) for i, row in df.iterrows()]
+
+# Calcular promedios por dominio
+promedios = df_respuestas.groupby("Dominio")["Respuesta"].mean().round(2).reset_index()
+promedios["Interpretación"] = promedios["Respuesta"].apply(interpretar_promedio)
+
+# Mostrar resultados
+st.subheader("📊 Resultados por Dominio")
+st.dataframe(promedios)
+
+# Gráfico de barras
+fig = px.bar(promedios, x="Dominio", y="Respuesta", color="Interpretación",
+             color_discrete_map={
+                 "🔴 Riesgo Alto – Se requiere intervención inmediata.": "red",
+                 "🟡 Riesgo Medio – Oportunidad de mejora.": "orange",
+                 "🟢 Cumplimiento Bueno – Controles adecuados.": "green"
+             },
+             title="Promedios por Dominio ISO 27001")
+st.plotly_chart(fig, use_container_width=True)
+
+# Mostrar interpretación textual
+st.subheader("📌 Interpretación General")
+for _, row in promedios.iterrows():
+    st.markdown(f"**{row['Dominio']}**: {row['Interpretación']} (Puntaje: {row['Respuesta']})")
